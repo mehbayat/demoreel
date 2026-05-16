@@ -1,0 +1,60 @@
+# The meta-demo: DemoReel recording the DemoReel npm page.
+#
+# Run with:
+#   npx demoreel record examples/self-demo/demo.yaml
+#
+# Produces demo.mp4 next to this file. Used as the README hero
+# asset on https://github.com/mehbayat/demoreel.
+meta:
+  title: "DemoReel — Scriptable browser demos"
+  resolution: 1920x1080
+  fps: 30
+  output: demoreel-meta.mp4
+  brand_color: "#10b981"
+
+scenes:
+  - name: intro
+    overlay:
+      dialogue: "Every SaaS demo video shouldn't have to be re-edited by hand."
+      animation: fade-in
+
+  - name: open-npm
+    action: goto
+    url: "https://www.npmjs.com/package/demoreel"
+    wait_for: "h2"
+    pause_after: 1s
+
+  - name: zoom-package-name
+    action: pause
+    duration: 2s
+    zoom:
+      selector: "h2"
+      level: 1.4x
+      transition: ease-in-out 0.5s
+    overlay:
+      dialogue: "Install once. Drive the browser. Render the MP4."
+
+  - name: scroll-to-readme
+    action: scroll
+    to:
+      y: 800
+    pause_after: 1s
+
+  - name: zoom-readme
+    action: pause
+    duration: 3s
+    zoom:
+      selector: "main"
+      level: 1.2x
+    overlay:
+      dialogue: "Scripts live next to your code. PR them like docs."
+
+  - name: outro
+    action: pause
+    duration: 2s
+    overlay:
+      dialogue: "Open-source. MIT. MCP-enabled."
+      cta:
+        text: "github.com/mehbayat/demoreel →"
+        url: "https://github.com/mehbayat/demoreel"
+      animation: fade-out
