@@ -71,18 +71,26 @@ export function buildOverlayChain(
     const startSec = traceEntry.start_ms / 1000;
     const endSec = traceEntry.end_ms / 1000;
     const sceneCfg = scenes.find((s) => s.name === asset.sceneName);
+    void sceneCfg;
     // Apply a fade-in/out window: 0.3s ramp at each boundary by default,
     // unless the scene declares a `typewriter` animation (handled in v2).
     const fadeIn = 0.3;
     const fadeOut = 0.3;
+    const fadeOutStart = Math.max(startSec, endSec - fadeOut);
     const enable = `between(t,${startSec},${endSec})`;
     extraInputs.push(asset.path);
     const next = `[v${inputIndex}]`;
-    const alphaExpr =
-      `if(between(t,${startSec},${startSec + fadeIn}),(t-${startSec})/${fadeIn},` +
-      `if(between(t,${endSec - fadeOut},${endSec}),(${endSec}-t)/${fadeOut},1))`;
+    // 2026-05-16: switch from `colorchannelmixer=aa='<t expr>'` to
+    // chained `fade` filters. colorchannelmixer doesn't expose the
+    // frame-time variable `t`, so the alpha expression failed to
+    // parse on real ffmpeg. fade=in/out:alpha=1 IS time-aware and
+    // produces the same visual ramp.
     filterParts.push(
-      `[${inputIndex}:v]format=rgba,colorchannelmixer=aa='${alphaExpr}'[d${inputIndex}];` +
+      `[${inputIndex}:v]` +
+        `format=rgba,` +
+        `fade=in:st=${startSec}:d=${fadeIn}:alpha=1,` +
+        `fade=out:st=${fadeOutStart}:d=${fadeOut}:alpha=1` +
+        `[d${inputIndex}];` +
         `${currentLabel}[d${inputIndex}]overlay=${asset.x}:${asset.y}:enable='${enable}'${next}`,
     );
     currentLabel = next;

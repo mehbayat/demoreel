@@ -44,7 +44,7 @@ scenes:
     action: pause
     duration: 3s
     zoom:
-      selector: "main"
+      region: { x: 200, y: 400, width: 1200, height: 600 }
       level: 1.2x
     overlay:
       dialogue: "Scripts live next to your code. PR them like docs."
