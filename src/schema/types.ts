@@ -29,6 +29,31 @@ export type ActionKind =
 
 export type OverlayAnimation = "fade-in" | "fade-out" | "slide-up" | "typewriter";
 
+/**
+ * Intro / outro card spec. Each card renders as a static MP4
+ * segment prepended (intro) or appended (outro) to the main
+ * recording. Renderer = Playwright HTML → PNG → ffmpeg loop into
+ * an MP4 of ``duration_sec``. Same path for both kinds.
+ */
+export interface IntroOutroCard {
+  /** Main headline copy. */
+  title: string;
+  /** Optional subtitle / tagline drawn below the title. */
+  subtitle?: string;
+  /** Optional logo image (PNG/SVG path, relative to the demo file). */
+  logo?: string;
+  /** Background color (CSS hex). Default: #0a0a0a. */
+  background?: string;
+  /** Text color. Default: #ffffff. */
+  text_color?: string;
+  /** Accent color for the optional CTA pill. Default: project brand. */
+  accent_color?: string;
+  /** Optional CTA pill rendered below the subtitle. */
+  cta?: { text: string; url?: string };
+  /** Duration in seconds. Default: 3s. */
+  duration_sec?: number;
+}
+
 export interface DemoMeta {
   /** Human title surfaced in dialogue + outro cards. */
   title: string;
@@ -40,6 +65,10 @@ export interface DemoMeta {
   output?: string;
   /** Optional brand color (CSS), used by default overlay templates. */
   brand_color?: string;
+  /** Intro card prepended before the recording. */
+  intro?: IntroOutroCard;
+  /** Outro card appended after the recording. */
+  outro?: IntroOutroCard;
 }
 
 export interface Overlay {

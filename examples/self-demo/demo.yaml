@@ -11,6 +11,17 @@ meta:
   fps: 30
   output: demoreel-meta.mp4
   brand_color: "#10b981"
+  intro:
+    title: "DemoReel"
+    subtitle: "Scriptable browser demos with cinematic post-production."
+    duration_sec: 2.5
+  outro:
+    title: "Open source. MIT."
+    subtitle: "Star it, fork it, npm install demoreel."
+    cta:
+      text: "github.com/mehbayat/demoreel"
+      url: "https://github.com/mehbayat/demoreel"
+    duration_sec: 3
 
 scenes:
   - name: intro

@@ -24,6 +24,7 @@ import { join } from "node:path";
 import type { DemoConfig } from "../schema/types.js";
 import { log } from "../util/log.js";
 import { parseResolution, resolveRelativeToDemo } from "../util/paths.js";
+import { renderIntroOutroCard } from "./cards.js";
 import { renderDialoguePngs } from "./dialogue.js";
 import { buildOverlayChain } from "./overlay.js";
 import type { Trace } from "../recorder/trace.js";
@@ -92,15 +93,123 @@ export async function runPostPipeline(
   ].join(";");
 
   const finalOut = resolveRelativeToDemo(demoDir, outputPath);
+  const fps = config.meta.fps ?? 30;
+
+  // 2026-05-16: intro / outro cards. When meta.intro or meta.outro
+  // is set, render each as a static MP4 segment matching the main
+  // recording's dims + fps, then concat [intro?, main, outro?].
+  // Skip rendering the main MP4 directly to finalOut when either
+  // card is present — pipe to a tmp file first so the concat step
+  // can splice them in.
+  const hasIntro = !!config.meta.intro;
+  const hasOutro = !!config.meta.outro;
+  const mainOut = hasIntro || hasOutro
+    ? join(workDir, "main.mp4")
+    : finalOut;
+
   await runFfmpeg({
     inputs: [rawVideoPath, ...overlay.extraInputs],
     filterGraph,
-    output: finalOut,
-    fps: config.meta.fps ?? 30,
+    output: mainOut,
+    fps,
   });
+
+  if (hasIntro || hasOutro) {
+    const cardsDir = join(workDir, "cards");
+    mkdirSync(cardsDir, { recursive: true });
+    const segments: string[] = [];
+    if (hasIntro && config.meta.intro) {
+      const introPath = join(cardsDir, "intro.mp4");
+      await renderIntroOutroCard({
+        card: config.meta.intro,
+        demoDir,
+        outputPath: introPath,
+        width: resolution.width,
+        height: resolution.height,
+        fps,
+        brandColor: config.meta.brand_color,
+      });
+      segments.push(introPath);
+    }
+    segments.push(mainOut);
+    if (hasOutro && config.meta.outro) {
+      const outroPath = join(cardsDir, "outro.mp4");
+      await renderIntroOutroCard({
+        card: config.meta.outro,
+        demoDir,
+        outputPath: outroPath,
+        width: resolution.width,
+        height: resolution.height,
+        fps,
+        brandColor: config.meta.brand_color,
+      });
+      segments.push(outroPath);
+    }
+    await concatMp4s(segments, finalOut, fps);
+    log.info("post.concat_with_cards", {
+      segments: segments.length,
+      intro: hasIntro,
+      outro: hasOutro,
+    });
+  }
 
   log.info("post.done", { output: finalOut });
   return { outputPath: finalOut };
+}
+
+/**
+ * Concat a list of MP4 segments into a single output via ffmpeg's
+ * concat demuxer. All inputs must share dims + framerate + codec —
+ * the card renderer matches the main pipeline's encoder settings
+ * (libx264, yuv420p, 30fps) so this is a safe path.
+ */
+async function concatMp4s(
+  segments: string[],
+  output: string,
+  fps: number,
+): Promise<void> {
+  // ffmpeg concat filter is more robust than the demuxer for
+  // cases where the inputs MIGHT diverge in encoder settings —
+  // it re-encodes everything to a uniform output. Worth the
+  // small extra CPU cost vs. demuxer fragility.
+  const filterInputs = segments.map((_, i) => `[${i}:v]`).join("");
+  const filter = `${filterInputs}concat=n=${segments.length}:v=1:a=0[out]`;
+  const args = [
+    "-y",
+    "-hide_banner",
+    "-loglevel",
+    "error",
+    ...segments.flatMap((s) => ["-i", s]),
+    "-filter_complex",
+    filter,
+    "-map",
+    "[out]",
+    "-r",
+    String(fps),
+    "-c:v",
+    "libx264",
+    "-pix_fmt",
+    "yuv420p",
+    "-preset",
+    "medium",
+    "-crf",
+    "20",
+    "-movflags",
+    "+faststart",
+    output,
+  ];
+  await new Promise<void>((resolve, reject) => {
+    const proc = spawn("ffmpeg", args, { stdio: ["ignore", "ignore", "pipe"] });
+    let stderr = "";
+    proc.stderr.on("data", (chunk: Buffer) => {
+      stderr += chunk.toString("utf8");
+    });
+    proc.on("error", (err) => reject(err));
+    proc.on("close", (code) => {
+      if (code === 0) resolve();
+      else reject(new Error(`ffmpeg concat exited ${code}: ${stderr.slice(-800)}`));
+    });
+  });
 }
 
 interface FfmpegArgs {

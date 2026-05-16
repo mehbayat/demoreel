@@ -153,6 +153,30 @@ const scene = {
   ],
 } as const;
 
+const introOutroCard = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    title: { type: "string", minLength: 1 },
+    subtitle: { type: "string" },
+    logo: { type: "string", description: "PNG/SVG path, relative to the demo file." },
+    background: { type: "string", pattern: "^#[0-9a-fA-F]{3,8}$" },
+    text_color: { type: "string", pattern: "^#[0-9a-fA-F]{3,8}$" },
+    accent_color: { type: "string", pattern: "^#[0-9a-fA-F]{3,8}$" },
+    cta: {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        text: { type: "string", minLength: 1 },
+        url: { type: "string", minLength: 1 },
+      },
+      required: ["text"],
+    },
+    duration_sec: { type: "number", exclusiveMinimum: 0, maximum: 30 },
+  },
+  required: ["title"],
+} as const;
+
 export const demoSchema = {
   $schema: "http://json-schema.org/draft-07/schema#",
   $id: "https://github.com/mehbayat/demoreel/schema/demo.json",
@@ -173,6 +197,8 @@ export const demoSchema = {
           pattern: "^#[0-9a-fA-F]{3,8}$",
           description: "Brand color in CSS hex format.",
         },
+        intro: introOutroCard,
+        outro: introOutroCard,
       },
       required: ["title"],
     },
