@@ -25,6 +25,11 @@ import type { DemoConfig } from "../schema/types.js";
 import { log } from "../util/log.js";
 import { parseResolution, resolveRelativeToDemo } from "../util/paths.js";
 import { renderIntroOutroCard } from "./cards.js";
+import {
+  buildCursorPulses,
+  compositeCursorOverlay,
+  renderCursorHighlightPng,
+} from "./cursor.js";
 import { renderDialoguePngs } from "./dialogue.js";
 import { buildOverlayChain } from "./overlay.js";
 import type { Trace } from "../recorder/trace.js";
@@ -98,21 +103,42 @@ export async function runPostPipeline(
   // 2026-05-16: intro / outro cards. When meta.intro or meta.outro
   // is set, render each as a static MP4 segment matching the main
   // recording's dims + fps, then concat [intro?, main, outro?].
-  // Skip rendering the main MP4 directly to finalOut when either
-  // card is present — pipe to a tmp file first so the concat step
-  // can splice them in.
+  // 2026-05-16: cursor pulses ALSO composite on top of the main
+  // MP4 (before concat with cards). If pulses exist, the main
+  // render goes to a tmp, then cursor overlay produces the
+  // cursor-decorated MP4. The concat step (if any) consumes that.
   const hasIntro = !!config.meta.intro;
   const hasOutro = !!config.meta.outro;
-  const mainOut = hasIntro || hasOutro
-    ? join(workDir, "main.mp4")
-    : finalOut;
+  const pulses = buildCursorPulses(trace);
+  const hasCursorPulses = pulses.length > 0;
+
+  const mainRawOut =
+    hasIntro || hasOutro || hasCursorPulses
+      ? join(workDir, "main.mp4")
+      : finalOut;
 
   await runFfmpeg({
     inputs: [rawVideoPath, ...overlay.extraInputs],
     filterGraph,
-    output: mainOut,
+    output: mainRawOut,
     fps,
   });
+
+  let mainOut = mainRawOut;
+  if (hasCursorPulses) {
+    log.info("post.cursor_overlay", { pulses: pulses.length });
+    const cursorPng = await renderCursorHighlightPng(join(workDir, "cursor"));
+    const cursorOut = join(workDir, "main-with-cursor.mp4");
+    const applied = await compositeCursorOverlay(
+      mainRawOut,
+      cursorOut,
+      cursorPng,
+      pulses,
+    );
+    if (applied) {
+      mainOut = cursorOut;
+    }
+  }
 
   if (hasIntro || hasOutro) {
     const cardsDir = join(workDir, "cards");

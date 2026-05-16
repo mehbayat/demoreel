@@ -30,10 +30,10 @@ export async function runSceneAction(
       await doGoto(page, scene);
       break;
     case "click":
-      await doClick(page, scene);
+      await doClick(page, scene, ctx);
       break;
     case "type":
-      await doType(page, scene);
+      await doType(page, scene, ctx);
       break;
     case "scroll":
       await doScroll(page, scene);
@@ -75,13 +75,26 @@ async function doGoto(page: Page, scene: Scene): Promise<void> {
   if (scene.wait_for) await page.waitForSelector(scene.wait_for);
 }
 
-async function doClick(page: Page, scene: Scene): Promise<void> {
+async function doClick(page: Page, scene: Scene, ctx: ActionContext): Promise<void> {
   if (!scene.selector) throw new Error(`scene ${scene.name}: click requires selector`);
-  await page.locator(scene.selector).first().click();
+  const locator = page.locator(scene.selector).first();
+  // 2026-05-16: capture click center as a mouse position so the
+  // post-processor can render a cursor-highlight pulse there.
+  // Headless Chromium has no system cursor; the "mouse position"
+  // = where Playwright's mouse class was acting. boundingBox()
+  // before the click is the cheapest correct probe.
+  const bbox = await locator.boundingBox();
+  if (bbox) {
+    ctx.trace.pushMouse(
+      Math.round(bbox.x + bbox.width / 2),
+      Math.round(bbox.y + bbox.height / 2),
+    );
+  }
+  await locator.click();
   if (scene.wait_for) await page.waitForSelector(scene.wait_for);
 }
 
-async function doType(page: Page, scene: Scene): Promise<void> {
+async function doType(page: Page, scene: Scene, ctx: ActionContext): Promise<void> {
   if (!scene.selector || scene.text === undefined) {
     throw new Error(`scene ${scene.name}: type requires selector + text`);
   }
@@ -92,6 +105,15 @@ async function doType(page: Page, scene: Scene): Promise<void> {
         ? parseDurationToMs(scene.speed)
         : 80; // brief default
   const locator = page.locator(scene.selector).first();
+  // 2026-05-16: same cursor capture as doClick — the focus click
+  // is where the user's eye will track to.
+  const bbox = await locator.boundingBox();
+  if (bbox) {
+    ctx.trace.pushMouse(
+      Math.round(bbox.x + bbox.width / 2),
+      Math.round(bbox.y + bbox.height / 2),
+    );
+  }
   await locator.click();
   await locator.fill(""); // clear existing
   // Playwright's `type` accepts a per-keystroke delay; this is the
