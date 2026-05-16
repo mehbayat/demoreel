@@ -27,7 +27,7 @@ scenes:
   - name: intro
     overlay:
       dialogue: "Every SaaS demo video shouldn't have to be re-edited by hand."
-      animation: fade-in
+      animation: slide-up
 
   - name: open-npm
     action: goto

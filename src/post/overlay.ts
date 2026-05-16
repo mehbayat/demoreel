@@ -71,27 +71,44 @@ export function buildOverlayChain(
     const startSec = traceEntry.start_ms / 1000;
     const endSec = traceEntry.end_ms / 1000;
     const sceneCfg = scenes.find((s) => s.name === asset.sceneName);
-    void sceneCfg;
-    // Apply a fade-in/out window: 0.3s ramp at each boundary by default,
-    // unless the scene declares a `typewriter` animation (handled in v2).
+    const animation = sceneCfg?.overlay?.animation ?? "fade-in";
+    // Apply a fade-in/out window: 0.3s ramp at each boundary by default.
     const fadeIn = 0.3;
     const fadeOut = 0.3;
     const fadeOutStart = Math.max(startSec, endSec - fadeOut);
     const enable = `between(t,${startSec},${endSec})`;
     extraInputs.push(asset.path);
     const next = `[v${inputIndex}]`;
-    // 2026-05-16: switch from `colorchannelmixer=aa='<t expr>'` to
-    // chained `fade` filters. colorchannelmixer doesn't expose the
-    // frame-time variable `t`, so the alpha expression failed to
-    // parse on real ffmpeg. fade=in/out:alpha=1 IS time-aware and
-    // produces the same visual ramp.
+
+    // 2026-05-16: animation support.
+    // - ``fade-in`` / ``fade-out`` (default) — existing alpha ramp.
+    // - ``slide-up`` — animated y position: starts ~80px below the
+    //   final position, eases up to the final y over 0.4s, then
+    //   holds. Implemented via an ffmpeg ``y=`` expression
+    //   referencing frame time ``t``. The fade ramps stay on so
+    //   the slide reads as a coherent reveal.
+    // - ``typewriter`` — falls back to fade-in for now; full
+    //   char-reveal is a v0.2 follow-up (needs PNG-sequence-to-
+    //   alpha-WebM authoring; deferred to keep this round under a
+    //   day).
+    const useSlideUp = animation === "slide-up";
+    const slideDistance = 80; // px
+    const slideDur = 0.4; // s
+    const yExpr = useSlideUp
+      ? `'if(lt(t,${startSec}+${slideDur}),` +
+        `${asset.y}+${slideDistance}*(1-(t-${startSec})/${slideDur}),` +
+        `${asset.y})'`
+      : `${asset.y}`;
+    const xExpr = `${asset.x}`;
+
+    // Per-asset alpha layer with fade in + out.
     filterParts.push(
       `[${inputIndex}:v]` +
         `format=rgba,` +
         `fade=in:st=${startSec}:d=${fadeIn}:alpha=1,` +
         `fade=out:st=${fadeOutStart}:d=${fadeOut}:alpha=1` +
         `[d${inputIndex}];` +
-        `${currentLabel}[d${inputIndex}]overlay=${asset.x}:${asset.y}:enable='${enable}'${next}`,
+        `${currentLabel}[d${inputIndex}]overlay=x=${xExpr}:y=${yExpr}:enable='${enable}'${next}`,
     );
     currentLabel = next;
     inputIndex += 1;
